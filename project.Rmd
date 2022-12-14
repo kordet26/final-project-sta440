@@ -1,0 +1,118 @@
+---
+title: "project"
+author: "Kevin Ordet"
+date: "2022-12-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lme4)
+```
+
+```{r}
+results <- read.csv("data/cook_popular_vote_tracker.csv")
+deniers <- read.csv("data/fivethirtyeight_election_deniers.csv")
+districts <- read.csv("data/urbanization-index-2022.csv")
+fundraising <- read.csv("data/candidate_summary_2022.csv")
+states <- read.csv("data/state_abbr.csv")
+education <- read.csv("data/educ_by_dist.csv")
+```
+
+```{r}
+house_deniers <- deniers%>%
+  filter(Office == "Representative")
+
+house_deniers <- merge(house_deniers, states)
+
+house_deniers <- house_deniers %>%
+  mutate(chars = nchar(District),
+         dist = ifelse(chars == 8, "01", 
+                       ifelse(chars==1, paste("0", District, sep=""),
+                              District)),
+         stcd = paste(abbr, dist, sep="-")) %>%
+  select(stcd, "candidate"=Candidate, "stance"=Stance)
+
+district_info <- merge(districts, house_deniers, by="stcd") %>%
+  select("district"=stcd, 
+         "pvi_22"=pvi_22,
+         "gop_candidate"=candidate,
+         "gop_candidate_stance"=stance,
+         urbanindex) %>%
+  filter(district != "AK-01")
+
+
+house_results <- results %>%
+  filter(dem_votes > 0, gop_votes > 0) %>%
+  mutate(other_votes = ifelse(other_votes>0, other_votes, 0),
+         other_votes = ifelse(is.na(other_votes), 0, other_votes),
+         dem_pct = dem_votes / (dem_votes + gop_votes + other_votes),
+         gop_pct = gop_votes / (dem_votes + gop_votes + other_votes),
+         margin = 100*(dem_pct-gop_pct)) %>%
+  select(district, incumbent, margin)
+
+df <- merge(house_results, district_info) %>%
+  mutate(state=substr(district, 1, 2))
+```
+
+```{r message=FALSE}
+house_fund <- fundraising %>%
+  filter(Cand_Office == "H") %>%
+  select("candidate" = Cand_Name, 
+         "state" = Cand_Office_St,
+         "district" = Cand_Office_Dist,
+         "party" = Cand_Party_Affiliation,
+         "raised" = Individual_Contribution) %>%
+  mutate(chars = nchar(district),
+         district = ifelse(district == 0, 1, district),
+         dist = ifelse(chars==1, paste("0", district, sep=""), district),
+         stcd = paste(state, dist, sep="-")) %>%
+  mutate(party = ifelse(party=="DFL", "DEM", party)) %>%
+  filter(party == "DEM" | party == "REP") %>%
+  select(stcd, candidate, party, raised)
+
+fund_summary <- house_fund %>%
+  group_by("district" = stcd, party) %>%
+  summarise(raised = max(raised)) %>%
+  mutate(raised = ifelse(raised <0, 0, raised)) %>%
+  ungroup()
+
+dem <- fund_summary %>%
+  filter(party == "DEM") %>%
+  select(district, raised)
+
+gop <- fund_summary %>%
+  filter(party == "REP") %>%
+  select(district, raised)
+
+fund <- merge(dem, gop, by="district", suffixes=c("_dem", "_gop"), all=TRUE)
+fund[is.na(fund)] <- 0
+
+
+df <- merge(df, fund)
+df <- merge(df, education)
+```
+
+
+```{r}
+df <- df %>%
+  mutate(dem_fundraising_pct = 100*(raised_dem / (raised_dem + raised_gop)),
+         centered_dem_fundraising_pct = dem_fundraising_pct-50,
+         centered_urban_index = urbanindex - mean(urbanindex),
+         centered_college_pct = pct_college - mean(pct_college),
+         denier = ifelse(gop_candidate_stance=="Fully denied", 1, 0),
+         inc = case_when(incumbent==0 ~ "open",
+                                   incumbent==1 ~ "dem",
+                                   incumbent==-1 ~ "gop"))
+
+df$inc <- relevel(factor(df$inc), ref="open")
+
+m <- lm(margin ~ pvi_22 + inc + 
+          centered_dem_fundraising_pct +
+          centered_urban_index +
+          centered_college_pct + denier, data=df)
+
+summary(m)
+```
