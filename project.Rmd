@@ -40,7 +40,7 @@ district_info <- merge(districts, house_deniers, by="stcd") %>%
          "pvi_22"=pvi_22,
          "gop_candidate"=candidate,
          "gop_candidate_stance"=stance,
-         urbanindex) %>%
+         urbanindex, grouping) %>%
   filter(district != "AK-01")
 
 
@@ -51,7 +51,10 @@ house_results <- results %>%
          dem_pct = dem_votes / (dem_votes + gop_votes + other_votes),
          gop_pct = gop_votes / (dem_votes + gop_votes + other_votes),
          margin = 100*(dem_pct-gop_pct)) %>%
-  select(district, incumbent, margin)
+  select(district, incumbent, dem_pct, gop_pct, margin) %>%
+  filter(district != "AZ-08", district!= "AZ-09", district!="WI-08")
+
+
 
 df <- merge(house_results, district_info) %>%
   mutate(state=substr(district, 1, 2))
@@ -91,9 +94,20 @@ fund <- merge(dem, gop, by="district", suffixes=c("_dem", "_gop"), all=TRUE)
 fund[is.na(fund)] <- 0
 
 
+
+
 df <- merge(df, fund)
-df <- merge(df, education)
+
+educ <- education %>%
+  mutate(chars = nchar(district),
+         district = ifelse(district == 0, 1, district),
+         district = ifelse(chars==4, paste(substr(district, 1, 3),"0", substr(district, 4, 4), sep=""), district)) 
+
+df <- merge(df, educ)
+
 ```
+
+
 
 
 ```{r}
@@ -105,14 +119,160 @@ df <- df %>%
          denier = ifelse(gop_candidate_stance=="Fully denied", 1, 0),
          inc = case_when(incumbent==0 ~ "open",
                                    incumbent==1 ~ "dem",
-                                   incumbent==-1 ~ "gop"))
+                                   incumbent==-1 ~ "gop"),
+         area_type = case_when(urbanindex > 12.5 ~ "urban",
+                               urbanindex > 10.5 ~ "suburban",
+                               TRUE ~ "rural"))
+
+df$resid <- df$margin - df$pvi_22
+
+```
+
+# Introduction
+
+
+
+
+# Exploratory Data Analysis
+
+```{r warning=FALSE, message=FALSE}
 
 df$inc <- relevel(factor(df$inc), ref="open")
+df$inc <- relevel(factor(df$inc), ref="gop")
 
-m <- lm(margin ~ pvi_22 + inc + 
+df %>%
+  ggplot(mapping=aes(x=pvi_22, y=margin, fill=inc, color=inc)) +
+    geom_hline(yintercept=0) +
+           geom_point(pch=21, size=2, color="black") +
+  theme_bw()
+
+
+df %>%
+  ggplot(mapping=aes(x=pvi_22, y=margin, fill=inc, color=inc)) +
+    geom_hline(yintercept=0) +
+           geom_point(pch=21, size=2, color="black", alpha=0.1) +
+            geom_smooth(alpha=0.2)+
+  theme_bw()
+
+df %>%
+  ggplot(mapping=aes(x=inc, y=resid, fill=inc), color="black") +
+  geom_boxplot(pch=21) +
+  theme_bw()
+```
+
+
+
+
+
+
+```{r}
+
+df %>%
+  ggplot(mapping=aes(x=dem_fundraising_pct, y=resid, fill=inc, color=inc)) +
+  facet_wrap(~ inc) +
+    geom_hline(yintercept=0) +
+           geom_point(pch=21, size=2, color="black") +
+  geom_smooth(alpha=0.1, method="lm") +
+  theme_bw()
+
+
+df %>%
+  ggplot(mapping=aes(x=pct_college, y=resid, fill=inc, color=inc))+  facet_wrap(~ inc) +
+    geom_hline(yintercept=0) +
+           geom_point(pch=21, size=2, color="black") +
+  geom_smooth(alpha=0.1, method="lm") +
+  theme_bw()
+
+
+df %>%
+  ggplot(mapping=aes(x=urbanindex, y=resid, fill=inc, color=inc))+  facet_wrap(~ inc) +
+    geom_hline(yintercept=0) +
+           geom_point(pch=21, size=2, color="black") +
+  geom_smooth(alpha=0.1, method="lm") +
+  theme_bw()
+```
+
+
+```{r warning=FALSE, message=FALSE}
+df$denier <- as.factor(df$denier)
+
+df %>%
+  ggplot(mapping=aes(x=pvi_22, y=margin, fill=
+                       denier, color=denier)) +
+           geom_point(pch=21, size=2, color="black") +
+  geom_smooth(alpha=0.2) +
+  theme_bw()
+
+
+df %>%
+  ggplot(mapping=aes(x=pvi_22, y=dem_fundraising_pct, fill=
+                       denier, color=denier)) +
+           geom_point(pch=21, size=2, color="black") +
+  geom_smooth(alpha=0) +
+  theme_bw() +
+  ylim(0, 100)
+```
+# Methodology
+
+# Results
+
+```{r}
+
+df$denier <- as.numeric(df$denier)
+df$inc <- relevel(factor(df$inc), ref="open")
+df$area_type <- relevel(factor(df$area_type), ref="suburban")
+
+
+m <- lmer(margin ~ pvi_22 + inc +
           centered_dem_fundraising_pct +
           centered_urban_index +
-          centered_college_pct + denier, data=df)
+          centered_college_pct + denier + (1 | state), data=df)
 
 summary(m)
 ```
+
+
+
+For an open seat with even partisanship, equal fundraising, the national average
+for population density and educational attainment, and
+a non-election denying Republican candidate, the expected outcome was a Republican
+win by 1.21 percentage points. 
+
+
+Holding all other variables constant and including random intercepts by state:
+
+
+Districts with elected Republican incumbents were expected to vote 2.88 points
+more Republican than open seats. Similarly, districts with elected Democratic incumbents were expected to vote 1.98 points more Republican than open seats.
+
+For every one percentage point increase in the Democratic share of combined
+fundraising, a district was expected to vote 0.099 points more Democratic.
+
+For every one percentage point increase in the proportion of population with
+college degrees, a district was expected to vote 0.107 points more Democratic.
+(For reference, districts ranged from 8.4% to 78.8% college educated, and the
+middle 80% of districts fall between 20.3% and 46.9% college educated.)
+
+For every one point increase in the urbanization index, a district was expected
+to vote 1.08 points more Republican. (For reference, the most urban districts
+have urbanization indices just under 15, while the most rural districts have values
+slightly above 8.)
+
+Districts with election denying Republicans on the ballot were expected to
+vote 1.15 points more Democratic than those without.
+
+
+
+# Discussion
+
+
+This finding is consistent with a declining, yet meaningful, incumbency advantage.
+
+
+
+Excluding uncontested seats, the average swing from the 2020 presidential election was 5.09 points towards Republicans, implying a national environment that leans Republican by 0.64 points. This figure is similar to the 1.21-point Republican environment implied model's intercept.
+
+
+
+
+
