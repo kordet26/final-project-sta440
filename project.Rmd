@@ -140,14 +140,106 @@ df <- df %>%
 
 # Introduction
 
+## Background Information
+
+In the wake of the 2020 presidential election, where President Joe Biden denied incumbent
+Donald Trump a second term, then-President Trump and a significant number of Republicans made false claims regarding the election's legitimacy. After Trump's defeat, a mob of his supporters attacked the U.S. capitol building to stop the counting of electoral votes. In the months that followed,
+this unprecedented attempt to subvert American democracy has continued to take form in state legislatures throughout the country, with eyes on overturning the 2024 election. 
+
+The 2022 midterms are the first major national election to follow these events. As FiveThirtyEight found, as many as six in ten Americans had an election denier on the ballot in 2022. While the 
+conventional wisdom suggests that the president's party struggles in midterms, how would these developments, along with the Supreme Court's overturning of Roe, change the political calculus?
+
+In an era where negative partisanship runs deep and split-ticket voting is at an all-time low,
+it may seem reasonable to conclude that candidate quality and other factors do not matter much. After all, the majority of voters will always check the box for whichever candidate has
+a "D" or "R" next to their name. However, in every election cycle, there are a handful of candidates who manage to defy the political gravity: a Democrat in rural Alaska, a Republican in the New York metro. This analysis aims to evaluate not only traditional metrics of candidate quality, such as incumbency and fundraising, but also the element of election denialism:
+how did these candidates perform at the ballot box?
+
+This study focuses on the 2022 House of Representatives elections, which are contested in 435 single-member districts across the country. This choice was made to access the greatest amount of data, recognizing that statewide Senate and gubernatorial races each have distinct features. For purposes of this analysis, elections must only involve a single Democrat and single Republican; although, there may be third party candidates. While most states hold partisan primaries and first-past-the-post general elections, there are some exceptions. California and Alaska each utilize non-partisan blanket (or jungle) primaries, in which multiple candidates from the same party can advance to the general election. The majority of the California seats are contested by both parties (and thus were included in this analysis), while Alaska's at-large district (AK-01) had two Republicans on the general election ballot (and thus was excluded). Further, parties sometimes choose not to nominate candidates for races that are deemed uncompetitive; these districts are also omitted from the study.
 
 
-
-# Exploratory Data Analysis
-```{r}
-(cor(df$pvi_22, df$margin))^2
+## Data Description and Key Variables
+```{r echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+datasets <-"
+| Dataset                      | Source                   | Description                        |
+|------------------------------|--------------------------|------------------------------------|
+| cook_popular_vote_tracker | Cook Political Report | 2022 House election results by district                                                                                 |
+| urbanization-index-2022 | FiveThirtyEight | District partisan lean and urbanization                                                                                 |
+| fivethirtyeight_election_deniers | FiveThirtyEight | Republican stances on the 2020 election |
+| candidate_summary_2022 | Federal Election Commission | Candidate fundraising                                                                                  |
+| educ_by_district | POLITICO | College educated population by district                                                                               |
+| state_abbr | self | State names and postal codes                                                                                   |
+"
+cat(datasets)
 ```
 
+This analysis uses data from four nonpartisan sources: the Cook Political Report, FiveThirtyEight,
+the Federal Election Commission (FEC), and Politico. Additionally, there is a table of
+state names and postal codes to aid in merging the data from these different sources.
+The relevant variables from each dataset are merged into a single dataframe. Of the 435 congressional districts in total, 399 have complete data and satisfy the condition of
+having a single Democrat running against a single Republican.
+
+
+```{r echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+variables <-"
+| Name                       | Type                   | Description                        |
+|----------------------------|------------------------|------------------------------------|
+| district | Categorical | The five digit alphanumeric code for the congressional district (e.g. NC-04) |
+| state | Categorical | The state's postal code (e.g. NC) |
+| pvi_22 | Numeric | FiveThirtyEight's partisan lean of the district |
+| margin | Numeric | Democratic percentage point margin in 2022 House election |
+| incumbent | Categorical | The incumbent candidate's party (`dem` or `gop`) or `open` to specify open seats|
+| dem_fundraising_pct | Numeric | The Democratic percentage of total fundraising in the district |
+| pct_college | Numeric | The percentage of the district's population with a college degree |
+| urbanindex | Numeric | FiveThirtyEight's urbanization index|
+| denier | Binary | `1` for a Republican candidate that, per FiveThirtyEight, \"fully denies\" the 2020 election; `0` otherwise
+|
+"
+cat(variables)
+```
+
+
+An detailed explanation of the above variables follows: 
+
+* FiveThirtyEight's partisan lean `pvi_22` is defined as "50 percent the state or district’s lean relative to the nation in the most recent presidential election, 25 percent its relative lean in the second-most-recent presidential election and 25 percent a custom state-legislative lean." By convention, positive values indicate Democratic-leaning seats and negative values indicate Republican-leaning seats. Seats that favor a party by 15 or more points are said to be "Safe Democratic/Republican," while seats that favor a party by 5 to 15 points are considered "Lean
+Democratic/Republican." Districts with a `pvi_22` of no more than 5 points in either direction
+are categorized as "Toss-ups". By this metric, the most competitive seat in the country is TX-15 (`pvi_22` = -0.08), a right-trending district stretching from the Rio Grande Valley to the outskirts of San Antonio.
+
+* FiveThirtyEight's urbanization index `urbanindex` is defined as "the natural logarithm of the average number of people living within a five-mile radius of every census tract in a given district." Lower values indicate more rural districts, and higher values indicate more urban districts. The most rural district, with an `urbanindex` of 8.1, is MN-07 (eastern
+Minnesota). The most urban district, with an `urbanindex` of 14.9, is NY-12 (parts of Manhattan, Brooklyn, and Queens).
+
+* The 2022 House vote `margin` is calculated by subtracting the Democrat's vote share from the Republican's vote share. If the Democrat received 48.0 percent of the vote and the Republican received 51.0 percent, the `margin` is -3.0.
+
+* The `fivethirtyeight_election_deniers.csv` dataset classifies Republican candidates into one of six stances on the 2020 election: fully denied, raised questions, no comment, avoided answering, accepted with reservations, or fully accepted. Candidates who "fully denied" the 2020 election "either clearly stated that the election was stolen from Trump or took legal action to overturn the results, such as voting not to certify election results or joining lawsuits that sought to overturn the election." Of the 399 districts in this analysis, 152 (38%) of the Republican candidates
+were "full deniers" who received a `1` for the `denier` variable. All other candidates were
+marked with a `0` for the `denier` variable.
+
+* The Democratic fundraising share `dem_fundraising_pct` is the percentage of total individual contributions that went to the Democratic candidate. For example, if the Democrat raised
+\$300,000 and the Republican raised \$100,000, the `dem_fundraising_pct` is 75. This method is
+used to evaluate fundraising since FiveThirtyEight's forecasting models implement this calculation (with some adjustments), rather than the raw fundraising totals.
+
+* The remaining variables are self-explanatory.
+
+## Research Aims
+
+This study has three major goals:
+
+* Evaluate how "district factors" such as partisanship and demographics impacted the
+results of the 2022 House elections. Specifically, this study observes the effects
+of population density and education, two measures which underpin polarization in modern
+American politics. In the last decade, high-educated suburbs have trended sharply towards Democrats, while low-educated rural areas have moved even further towards Republicans. While
+urban areas are largely Democratic strongholds, Republicans have poached some support from these
+areas in recent years. How would these trends hold up in 2022?
+
+* Evaluate how "candidate factors" such as incumbency, fundraising, and election idealism mattered
+in the 2022 House elections. In our hyper-polarized era, the importance of incumbency may be declining, but can still make a difference on the margins -- after all, this is where elections are won and lost. Incumbents tend to out-fundraise their opponents, which is often attributed to electoral success. While many forecasting models tend to avoid subjective criteria, such as a candidate's stance, this analysis also aims to evaluate the effects of Republican election
+denialism at the ballot box.
+
+* Highlight the candidates and districts that managed to buck the political gravity. In doing so,
+we will gain a better understanding of the factors listed above and, hopefully, an appreciation
+for the complexity of electoral politics. While broader trends often dictate outcomes, the individual circumstances of each race still matter.
+
+
+## Exploratory Data Analysis
 
 ```{r warning=FALSE, message=FALSE}
 
@@ -183,8 +275,7 @@ The tables above show the five largest outperformances on each side of the aisle
 
 Three notable Democratic victories occurred in Republican-leaning districts, as
 incumbents Marcy Kaptur (OH-09), Jared Golden (ME-02), and Sharice Davids (KS-03)
-each won re-election by at least 6 points. Also worth mentioning is Mary Peltola's AK-01, which was not included in this analysis due to Alaska's ranked choice voting; the incumbent Democrat won Alaska's lone district by 10 points, even as Trump
-carried the state by double digits two years prior.
+each won re-election by at least 6 points. Also worth mentioning is Mary Peltola's AK-01, which was not included in this analysis due to Alaska's non-partisan primary; the incumbent Democrat won Alaska's lone district by 10 points, even as Trump carried the state by double digits two years prior.
 
 On the Republican side, Mario Diaz-Balart (FL-26) and Carlos Gimenez (FL-28) each trounced to re-election in formerly competitive south Florida seats, which
 continued to march rightward. Both districts backed Hillary Clinton just six years ago, and yet were won by Republicans by 42 and 27 points, respectively. In NY-02,
