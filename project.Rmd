@@ -2,7 +2,9 @@
 title: "project"
 author: "Kevin Ordet"
 date: "2022-12-14"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -10,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(lme4)
+library(knitr)
 ```
 
 ```{r}
@@ -134,6 +137,10 @@ df$resid <- df$margin - df$pvi_22
 
 
 # Exploratory Data Analysis
+```{r}
+(cor(df$pvi_22, df$margin))^2
+```
+
 
 ```{r warning=FALSE, message=FALSE}
 
@@ -145,27 +152,63 @@ df %>%
     geom_hline(yintercept=0) +
            geom_point(pch=21, size=2, color="black") +
   theme_bw()
+```
+
+The plot above shows the relationship between FiveThirtyEight's partisan lean `pvi_22` and the actual House vote `margin`. The points are colored by the 
+incumbent party `inc`: blue for Democratic incumbents, red for Republican incumbents,
+and green for open seats. 
+
+Glaringly, the variation in `pvi_22` lean predicts 96% of the variation in `margin`. Although partisanship dominates, there are several examples of candidates defying expectations across the map.
+
+From here on, `resid` is defined as the difference between `margin` and `pvi_22`.
+Positive values of `resid` indicate Democratic outperformances, while negative values represent Republican ones. By comparing the actual margin to the partisanship of each district, we can evaluate how each party performed relative to expectations. 
 
 
+```{r}
+head(df %>% arrange(desc(resid)), 5) %>%
+  select(district, pvi_22, margin, resid)
+
+head(df %>% arrange(desc(-resid)), 5) %>%
+  select(district, pvi_22, margin, resid)
+```
+
+The tables above show the five largest outperformances on each side of the aisle.
+
+Three notable Democratic victories occurred in Republican-leaning districts, as
+incumbents Marcy Kaptur (OH-09), Jared Golden (ME-02), and Sharice Davids (KS-03)
+each won re-election by at least 6 points. Also worth mentioning is Mary Peltola's AK-01, which was not included in this analysis due to Alaska's ranked choice voting; the incumbent Democrat won Alaska's lone district by 10 points, even as Trump
+carried the state by double digits two years prior.
+
+On the Republican side, Mario Diaz-Balart (FL-26) and Carlos Gimenez (FL-28) each trounced to re-election in formerly competitive south Florida seats, which
+continued to march rightward. Both districts backed Hillary Clinton just six years ago, and yet were won by Republicans by 42 and 27 points, respectively. In NY-02,
+moderate Republican Andrew Garbarino won a second term by 22 points, even as Biden nearly carried the seat in 2020. 
+
+
+The major theme, to be explored further, is that although partisanship reigns supreme, candidate quality and other factors still matter. The first of these
+factors to be analyzed is incumbency.
+
+
+```{r}
 df %>%
-  ggplot(mapping=aes(x=pvi_22, y=margin, fill=inc, color=inc)) +
+  ggplot(mapping=aes(x=pvi_22, y=resid, fill=inc, color=inc)) +
     geom_hline(yintercept=0) +
            geom_point(pch=21, size=2, color="black", alpha=0.1) +
             geom_smooth(alpha=0.2)+
   theme_bw()
-
-df %>%
-  ggplot(mapping=aes(x=inc, y=resid, fill=inc), color="black") +
-  geom_boxplot(pch=21) +
-  theme_bw()
 ```
 
+The plot above shows the `resid` of each district plotted against the partisan lean, with the points again colored by incumbent party `inc`. The trendlines highlight the
+importance of incumbency in swing districts. In districts that leaned towards the
+opposing party, incumbents tended to defy expectations by 5 to 10 points or more.
+On the other hand, non-competitive districts saw incumbents perform similarly
+to non-incumbents.
 
+Another interesting point is the relative success of Democrats in Republican-tilting
+open seats. In winning the national popular vote, Republicans overperformed partisanship in the majority of open seats. However, Democrats actually tended
+to beat partisan lean in open seats with a lean between R+20 and even. Further analysis of the qualities of these districts and candidates will help explain this
+phenomenon.
 
-
-
-
-```{r}
+```{r message=FALSE}
 
 df %>%
   ggplot(mapping=aes(x=dem_fundraising_pct, y=resid, fill=inc, color=inc)) +
@@ -193,7 +236,13 @@ df %>%
 ```
 
 
+
+# compare even to r+20 districts to all others (college, fund, urban)
+
 ```{r warning=FALSE, message=FALSE}
+
+
+# fix this 
 df$denier <- as.factor(df$denier)
 
 df %>%
@@ -212,7 +261,20 @@ df %>%
   theme_bw() +
   ylim(0, 100)
 ```
+
 # Methodology
+
+
+\begin{align*}
+\text{Margin}_{ij} = {} & (\gamma_{00} + u_{0j})+\gamma_{1}\text{PVI}+ \gamma_{2}\text{IncumbentD}  + \gamma_{3}\text{IncumbentR} + \gamma_{4}\text{FundraisingPctD} \, + \\ &
+\gamma_{5}\text{UrbanIndex} + \gamma_{6}\text{CollegePct} + \gamma_{7}\text{DenierR} + \epsilon_{ij}
+\end{align*}
+\begin{align*}
+\epsilon_{ij} &\sim \mathcal{N}(0, \sigma^2_\epsilon) \\
+u_{0j} &\sim \mathcal{N}(0, \sigma^2_u)
+\end{align*}
+
+
 
 # Results
 
@@ -228,7 +290,18 @@ m <- lmer(margin ~ pvi_22 + inc +
           centered_urban_index +
           centered_college_pct + denier + (1 | state), data=df)
 
-summary(m)
+coefs <- data.frame(coef(summary(m)))
+
+rownames(coefs) = c("Intercept", "FiveThirtyEight Partisan Lean (PVI)",
+                    "Democratic incumbent",
+                    "Republican incumbent",
+                    "Democratic percentage of fundraising (centered)",
+                    "FiveThirtyEight Urbanization Index (centered)",
+                    "College graduate percentage (centered)",
+                    "Republican election denier")
+
+coefs %>%
+  kable(digits=3)
 ```
 
 
