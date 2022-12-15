@@ -129,6 +129,13 @@ df <- df %>%
 
 df$resid <- df$margin - df$pvi_22
 
+df <- df %>%
+  mutate(pvi_group = case_when(pvi_22 > 15 ~ "Safe D",
+                               pvi_22 > 5 ~ "Lean D",
+                               pvi_22 > -5 ~ "Toss-up",
+                               pvi_22 > -15 ~ "Lean R",
+                               TRUE ~ "Safe R"))
+
 ```
 
 # Introduction
@@ -192,21 +199,34 @@ factors to be analyzed is incumbency.
 df %>%
   ggplot(mapping=aes(x=pvi_22, y=resid, fill=inc, color=inc)) +
     geom_hline(yintercept=0) +
-           geom_point(pch=21, size=2, color="black", alpha=0.1) +
+           geom_point(pch=21, size=2, color="black") +
             geom_smooth(alpha=0.2)+
   theme_bw()
 ```
 
 The plot above shows the `resid` of each district plotted against the partisan lean, with the points again colored by incumbent party `inc`. The trendlines highlight the
-importance of incumbency in swing districts. In districts that leaned towards the
-opposing party, incumbents tended to defy expectations by 5 to 10 points or more.
-On the other hand, non-competitive districts saw incumbents perform similarly
-to non-incumbents.
+importance of incumbency in swing districts. In "crossover districts" that leaned towards the one party but were held by the other, incumbents tended to defy expectations by 5 to 10 points or more. This trend can be partially attributed to self-selection; only the largest outperformers are going to hold crossover districts
+in the first place.
 
 Another interesting point is the relative success of Democrats in Republican-tilting
 open seats. In winning the national popular vote, Republicans overperformed partisanship in the majority of open seats. However, Democrats actually tended
-to beat partisan lean in open seats with a lean between R+20 and even. Further analysis of the qualities of these districts and candidates will help explain this
-phenomenon.
+to beat partisan lean in open seats with a lean between R+5 and R+15. 
+Further analysis of the qualities of these districts and candidates will help explain this phenomenon.
+
+
+
+
+```{r}
+df %>%
+  filter(pvi_group == "Lean R", inc=="open") %>%
+  select(district, denier, pvi_22, margin, resid) %>%
+  arrange(desc(resid))
+  
+```
+The table above shows the Republican-leaning (`pvi_22` between -15 and -5) open seats sorted by Democratic outperformance `resid`. Of note, Democrat Marie Gluesenkamp Perez defeated election-denying Republican Joe Kent in WA-03, which leans 9 points Republican, in what has been dubbed "the upset of the cycle." In total, Democrats
+outran expectations in 9 of the 12 districts and by an average of 2.1 points.
+
+
 
 ```{r message=FALSE}
 
@@ -236,19 +256,32 @@ df %>%
 ```
 
 
+The plots above show the Democratic outperformance `resid` plotted against
+Democratic fundrasing share `dem_fundriasing_pct`, percent of population with a
+college degree `pct_college`, and FiveThirtyEight's urban index. The plots are
+also grouped by incumbent type `inc`. The first major observation is that Democrats
+tended to outperform partisan lean in rural and high college-educated districts,
+while Republicans did so in urban and low college-educated seats. 
 
-# compare even to r+20 districts to all others (college, fund, urban)
+Second, increased fundraising tended to result in overperformance of partisanship,
+and incumbents dominated fundraising.
+
+
+
+
+
 
 ```{r warning=FALSE, message=FALSE}
 
 
-# fix this 
+# change colors
 df$denier <- as.factor(df$denier)
 
 df %>%
-  ggplot(mapping=aes(x=pvi_22, y=margin, fill=
+  ggplot(mapping=aes(x=pvi_22, y=resid, fill=
                        denier, color=denier)) +
            geom_point(pch=21, size=2, color="black") +
+  geom_hline(yintercept=0) +
   geom_smooth(alpha=0.2) +
   theme_bw()
 
@@ -346,6 +379,16 @@ This finding is consistent with a declining, yet meaningful, incumbency advantag
 Excluding uncontested seats, the average swing from the 2020 presidential election was 5.09 points towards Republicans, implying a national environment that leans Republican by 0.64 points. This figure is similar to the 1.21-point Republican environment implied model's intercept.
 
 
+# Appendix
 
-
-
+```{r}
+df %>%
+  group_by(pvi_group) %>%
+  summarise(districts = n(),
+            pct_college = mean(pct_college),
+            dem_fundraising_pct = mean(dem_fundraising_pct),
+            urban_index = mean(urbanindex),
+            pvi = mean(pvi_22)) %>%
+  arrange(desc(pvi)) %>%
+  select(-pvi)
+```
