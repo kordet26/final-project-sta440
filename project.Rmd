@@ -138,6 +138,9 @@ df <- df %>%
 
 ```
 
+
+
+
 # Introduction
 
 ## Background Information
@@ -156,8 +159,9 @@ how did these candidates perform at the ballot box?
 
 This study focuses on the 2022 House of Representatives elections, which are contested in 435 single-member districts across the country. This choice was made to access the greatest amount of data, recognizing that statewide Senate and gubernatorial races each have distinct features. For purposes of this analysis, elections must only involve a single Democrat and single Republican; although, there may be third party candidates. While most states hold partisan primaries and first-past-the-post general elections, there are some exceptions. California and Alaska each utilize non-partisan blanket (or jungle) primaries, in which multiple candidates from the same party can advance to the general election. The majority of the California seats are contested by both parties (and thus were included in this analysis), while Alaska's at-large district (AK-01) had two Republicans on the general election ballot (and thus was excluded). Further, parties sometimes choose not to nominate candidates for races that are deemed uncompetitive; these districts are also omitted from the study.
 
-
 ## Data Description and Key Variables
+
+
 ```{r echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
 datasets <-"
 | Dataset                      | Source                   | Description                        |
@@ -166,7 +170,7 @@ datasets <-"
 | urbanization-index-2022 | FiveThirtyEight | District partisan lean and urbanization                                                                                 |
 | fivethirtyeight_election_deniers | FiveThirtyEight | Republican stances on the 2020 election |
 | candidate_summary_2022 | Federal Election Commission | Candidate fundraising                                                                                  |
-| educ_by_district | POLITICO | College educated population by district                                                                               |
+| educ_by_district | POLITICO | Percent college educated population by district                                                                               |
 | state_abbr | self | State names and postal codes                                                                                   |
 "
 cat(datasets)
@@ -183,7 +187,7 @@ having a single Democrat running against a single Republican.
 variables <-"
 | Name                       | Type                   | Description                        |
 |----------------------------|------------------------|------------------------------------|
-| district | Categorical | The five digit alphanumeric code for the congressional district (e.g. NC-04) |
+| district | Categorical | The five digit alphanumeric code for the congressional district (e.g. NC-04 is North Carolina's 4th district) |
 | state | Categorical | The state's postal code (e.g. NC) |
 | pvi_22 | Numeric | FiveThirtyEight's partisan lean of the district |
 | margin | Numeric | Democratic percentage point margin in 2022 House election |
@@ -386,12 +390,62 @@ df %>%
   ylim(0, 100)
 ```
 
+
+```{r}
+df %>%
+  group_by(state) %>%
+  mutate(d_over = ifelse(resid>0, 1, 0)) %>%
+  summarise(resid = mean(resid), d_over = sum(d_over), n = n()) %>%
+  arrange(desc(resid))
+```
+
+
 # Methodology
 
+The relevant variables, which are listed as follows, were merged into a single
+dataframe by `district`:
+
+* The response variable `margin` was calculated by subtracting the `dem_pct`
+from the `gop_pct` in `cook_popular_vote_tracker.csv`. The dataset's `incumbent`
+variable is also taken, which uses a `1` for Democratic incumbents, `-1` for Republican incumbents, `0` for open seats. In the variable `inc`, these values are translated to `dem`, `gop`, and
+`open`, respectively.
+
+* The FiveThirtyEight partisan lean `pvi_22` and urbanization index `urbanindex`
+were taken `urbanization-index-2022.csv`.
+
+* The Republican candidate's stance on the 2022 election was taken from `fivethirtyeight_election_deniers.csv`. The `denier` variable was encoded
+as `1` for "fully denying" candidates and `0` otherwise.
+
+* The percent college educated population `pct_college` was taken from `educ.by.district.csv`.
+
+* Using `candidate_summary_2022.csv`, the highest fundraising candidate for each
+party was determined for each district to obtain `raised_dem` and `raised_gop`
+(the premise being that the lower fundraising candidates were eliminated in
+the primary). From there, the `raised_dem` was divided by the sum of `raised_dem`
+and `raised_gop` and multiplied by 100. The result of this calculation is the
+`dem_fundraising_pct`
+
+* The district's `state` was simply pulled from the first two digits of
+the alphanumeric code for each `district`.
+
+Before proceeding, three of the variables were centered to allow for better
+interpretation of results:
+
+* `centered_dem_fundraising_pct` is `dem_fundraising_pct` minus 50.
+
+* `centered_urban_index` and `centered_college_pct` are the mean-centered
+`urbanindex` and `pct_college`, respectively.
+
+The final dataset consists of 399 observations, representing the districts
+that satisfied the criteria for inclusion (contested seats with 
+one Democrat and one Republican, having complete fundraising data). To predict
+the `margin`, a linear model was fit using the predictors `pvi_22`, `inc`, `centered_dem_fundraising_pct`, `centered_urban_index`, `centered_college_pct`,
+and `denier`. To account for dependence within states, a random intercept was
+included for `state`.
 
 \begin{align*}
-\text{Margin}_{ij} = {} & (\gamma_{00} + u_{0j})+\gamma_{1}\text{PVI}+ \gamma_{2}\text{IncumbentD}  + \gamma_{3}\text{IncumbentR} + \gamma_{4}\text{FundraisingPctD} \, + \\ &
-\gamma_{5}\text{UrbanIndex} + \gamma_{6}\text{CollegePct} + \gamma_{7}\text{DenierR} + \epsilon_{ij}
+\text{Margin}_{ij} = {} & (\gamma_{00} + u_{0j})+\gamma_{1}\text{pvi_22}+ \gamma_{2}\text{inc_dem}  + \gamma_{3}\text{inc_gop} + \gamma_{4}\text{centered_dem_fundraising_pct} \, + \\ &
+\gamma_{5}\text{centered_urban_index} + \gamma_{6}\text{centered_college_pct} + \gamma_{7}\text{denier} + \epsilon_{ij}
 \end{align*}
 \begin{align*}
 \epsilon_{ij} &\sim \mathcal{N}(0, \sigma^2_\epsilon) \\
@@ -439,25 +493,24 @@ win by 1.21 percentage points.
 Holding all other variables constant and including random intercepts by state:
 
 
-Districts with elected Republican incumbents were expected to vote 2.88 points
-more Republican than open seats. Similarly, districts with elected Democratic incumbents were expected to vote 1.98 points more Republican than open seats.
+* Districts with elected Republican incumbents were expected to vote 2.88 points
+more Republican than open seats. Similarly, districts with elected Democratic incumbents were expected to vote 1.98 points more net Republican than open seats.
 
-For every one percentage point increase in the Democratic share of combined
-fundraising, a district was expected to vote 0.099 points more Democratic.
+* For every one percentage point increase in the Democratic share of combined
+fundraising, a district was expected to vote 0.099 points more net Democratic.
 
-For every one percentage point increase in the proportion of population with
-college degrees, a district was expected to vote 0.107 points more Democratic.
+* For every one percentage point increase in the proportion of population with
+college degrees, a district was expected to vote 0.107 points more net Democratic.
 (For reference, districts ranged from 8.4% to 78.8% college educated, and the
 middle 80% of districts fall between 20.3% and 46.9% college educated.)
 
-For every one point increase in the urbanization index, a district was expected
-to vote 1.08 points more Republican. (For reference, the most urban districts
+* For every one point increase in the urbanization index, a district was expected
+to vote 1.08 points more net Republican. (For reference, the most urban districts
 have urbanization indices just under 15, while the most rural districts have values
 slightly above 8.)
 
-Districts with election denying Republicans on the ballot were expected to
-vote 1.15 points more Democratic than those without.
-
+* Districts with election denying Republicans on the ballot were expected to
+vote 1.15 points more net Democratic than those without.
 
 
 # Discussion
