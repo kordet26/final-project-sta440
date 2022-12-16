@@ -116,16 +116,21 @@ df <- merge(df, educ)
 ```{r}
 df <- df %>%
   mutate(dem_fundraising_pct = 100*(raised_dem / (raised_dem + raised_gop)),
-         centered_dem_fundraising_pct = dem_fundraising_pct-50,
          centered_urban_index = urbanindex - mean(urbanindex),
          centered_college_pct = pct_college - mean(pct_college),
+         centered_dem_fundraising_pct = dem_fundraising_pct - 50,
          denier = ifelse(gop_candidate_stance=="Fully denied", 1, 0),
+         acceptor = ifelse(gop_candidate_stance=="Fully accepted", 1, 0),
          inc = case_when(incumbent==0 ~ "open",
                                    incumbent==1 ~ "dem",
                                    incumbent==-1 ~ "gop"),
          area_type = case_when(urbanindex > 12.5 ~ "urban",
                                urbanindex > 10.5 ~ "suburban",
                                TRUE ~ "rural"))
+
+df <- df %>%
+  group_by(inc) %>%
+      mutate(dem_fundraising_pct_over_exp = dem_fundraising_pct - mean(dem_fundraising_pct)) %>% ungroup()
 
 df$resid <- df$margin - df$pvi_22
 
@@ -150,12 +155,11 @@ Donald Trump a second term, then-President Trump and a significant number of Rep
 this unprecedented attempt to subvert American democracy has continued to take form in state legislatures throughout the country, with eyes on overturning the 2024 election. 
 
 The 2022 midterms are the first major national election to follow these events. As FiveThirtyEight found, as many as six in ten Americans had an election denier on the ballot in 2022. While the 
-conventional wisdom suggests that the president's party struggles in midterms, how would these developments, along with the Supreme Court's overturning of Roe, change the political calculus?
+conventional wisdom suggests that the president's party struggles in midterms, how would these developments, along with the Supreme Court's overturning of _Roe_, change the political calculus?
 
 In an era where negative partisanship runs deep and split-ticket voting is at an all-time low,
 it may seem reasonable to conclude that candidate quality and other factors do not matter much. After all, the majority of voters will always check the box for whichever candidate has
-a "D" or "R" next to their name. However, in every election cycle, there are a handful of candidates who manage to defy the political gravity: a Democrat in rural Alaska, a Republican in the New York metro. This analysis aims to evaluate not only traditional metrics of candidate quality, such as incumbency and fundraising, but also the element of election denialism:
-how did these candidates perform at the ballot box?
+a "D" or "R" next to their name. However, in every election cycle, there are a handful of candidates who manage to defy the political gravity: a Democrat in rural Alaska, a Republican in the New York metro. This analysis aims to evaluate not only traditional metrics of candidate quality, such as incumbency and fundraising, but also the element of election denialism: how did these candidates perform at the ballot box?
 
 This study focuses on the 2022 House of Representatives elections, which are contested in 435 single-member districts across the country. This choice was made to access the greatest amount of data, recognizing that statewide Senate and gubernatorial races each have distinct features. For purposes of this analysis, elections must only involve a single Democrat and single Republican; although, there may be third party candidates. While most states hold partisan primaries and first-past-the-post general elections, there are some exceptions. California and Alaska each utilize non-partisan blanket (or jungle) primaries, in which multiple candidates from the same party can advance to the general election. The majority of the California seats are contested by both parties (and thus were included in this analysis), while Alaska's at-large district (AK-01) had two Republicans on the general election ballot (and thus was excluded). Further, parties sometimes choose not to nominate candidates for races that are deemed uncompetitive; these districts are also omitted from the study.
 
@@ -266,7 +270,6 @@ Glaringly, the variation in `pvi_22` lean predicts 96% of the variation in `marg
 From here on, `resid` is defined as the difference between `margin` and `pvi_22`.
 Positive values of `resid` indicate Democratic outperformances, while negative values represent Republican ones. By comparing the actual margin to the partisanship of each district, we can evaluate how each party performed relative to expectations. 
 
-
 ```{r}
 head(df %>% arrange(desc(resid)), 5) %>%
   select(district, pvi_22, margin, resid)
@@ -356,13 +359,8 @@ Democratic fundrasing share `dem_fundriasing_pct`, percent of population with a
 college degree `pct_college`, and FiveThirtyEight's urban index. The plots are
 also grouped by incumbent type `inc`. The first major observation is that Democrats
 tended to outperform partisan lean in rural and high college-educated districts,
-while Republicans did so in urban and low college-educated seats. 
-
-Second, increased fundraising tended to result in overperformance of partisanship,
+while Republicans did so in urban and low college-educated seats. Second, increased fundraising tended to result in overperformance of partisanship,
 and incumbents dominated fundraising.
-
-
-
 
 
 
@@ -441,7 +439,7 @@ that satisfied the criteria for inclusion (contested seats with
 one Democrat and one Republican, having complete fundraising data). To predict
 the `margin`, a linear model was fit using the predictors `pvi_22`, `inc`, `centered_dem_fundraising_pct`, `centered_urban_index`, `centered_college_pct`,
 and `denier`. To account for dependence within states, a random intercept was
-included for `state`.
+included for `state`. The full equation for the model is as follows:
 
 \begin{align*}
 \text{Margin}_{ij} = {} & (\gamma_{00} + u_{0j})+\gamma_{1}\text{pvi_22}+ \gamma_{2}\text{inc_dem}  + \gamma_{3}\text{inc_gop} + \gamma_{4}\text{centered_dem_fundraising_pct} \, + \\ &
@@ -457,16 +455,14 @@ u_{0j} &\sim \mathcal{N}(0, \sigma^2_u)
 # Results
 
 ```{r}
-
-df$denier <- as.numeric(df$denier)
+df$inc <- relevel(factor(df$inc), ref="dem")
 df$inc <- relevel(factor(df$inc), ref="open")
-df$area_type <- relevel(factor(df$area_type), ref="suburban")
-
+df
 
 m <- lmer(margin ~ pvi_22 + inc +
           centered_dem_fundraising_pct +
           centered_urban_index +
-          centered_college_pct + denier + (1 | state), data=df)
+          centered_college_pct + denier + acceptor + (1 | state), data=df)
 
 coefs <- data.frame(coef(summary(m)))
 
@@ -476,7 +472,8 @@ rownames(coefs) = c("Intercept", "FiveThirtyEight Partisan Lean (PVI)",
                     "Democratic percentage of fundraising (centered)",
                     "FiveThirtyEight Urbanization Index (centered)",
                     "College graduate percentage (centered)",
-                    "Republican election denier")
+                    "Republican \"fully denies\" legitamcy of 2020 election",
+                    "Republican \"fully accepts\" legitamcy of 2020 election")
 
 coefs %>%
   kable(digits=3)
@@ -486,46 +483,69 @@ coefs %>%
 
 For an open seat with even partisanship, equal fundraising, the national average
 for population density and educational attainment, and
-a non-election denying Republican candidate, the expected outcome was a Republican
-win by 1.21 percentage points. 
+a Republican candidate who neither fully denied nor accepted the legitimacy of
+the 2020 election, the expected outcome was a Democratic win by 0.06 percentage
+points. 
 
 
 Holding all other variables constant and including random intercepts by state:
 
+* For every one percentage point increase in the partisan lean (i.e. more Democratic), a district was expected to vote 0.918 points more net Democratic.
 
-* Districts with elected Republican incumbents were expected to vote 2.88 points
-more Republican than open seats. Similarly, districts with elected Democratic incumbents were expected to vote 1.98 points more net Republican than open seats.
+* Districts with elected Republican incumbents were expected to vote 2.802 points
+more Republican than open seats. Similarly, districts with elected Democratic incumbents were expected to vote 1.999	points more net Democratic than open seats.
 
 * For every one percentage point increase in the Democratic share of combined
-fundraising, a district was expected to vote 0.099 points more net Democratic.
-
-* For every one percentage point increase in the proportion of population with
-college degrees, a district was expected to vote 0.107 points more net Democratic.
-(For reference, districts ranged from 8.4% to 78.8% college educated, and the
-middle 80% of districts fall between 20.3% and 46.9% college educated.)
+fundraising, a district was expected to vote 0.100 points more net Democratic.
 
 * For every one point increase in the urbanization index, a district was expected
-to vote 1.08 points more net Republican. (For reference, the most urban districts
+to vote 1.043 points more net Republican. (For reference, the most urban districts
 have urbanization indices just under 15, while the most rural districts have values
 slightly above 8.)
 
-* Districts with election denying Republicans on the ballot were expected to
-vote 1.15 points more net Democratic than those without.
+* For every one percentage point increase in the proportion of population with
+college degrees, a district was expected to vote 0.109 points more net Democratic.
+(For reference, districts ranged from 8.4% to 78.8% college educated, and the
+middle 80% of districts fall between 20.3% and 46.9% college educated.)
 
+* Districts with election-denying Republicans on the ballot were expected to
+vote 0.990 points more net Democratic than districts with Republicans who neither fully denied nor accepted the legitimacy of the 2020 election.
+
+* Districts with election-accepting Republicans on the ballot were expected to
+vote 0.770 points more net Republican than districts with Republicans who neither fully denied nor accepted the legitimacy of the 2020 election.
 
 # Discussion
 
+The model's outcome is consistent with the overall picture of the 2022 House elections.
+Excluding uncontested seats, the average swing from the 2020 presidential election was 5.09 points towards Republicans, implying a national environment that leans Republican by 0.64 points (since Democrats won the presidency by 4.45 points nationwide). This figure is similar to the near neutral implied by the model's intercept.
 
-This finding is consistent with a declining, yet meaningful, incumbency advantage.
+While the incumbency advantage is ever-declining, it still yields a significant
+advantage, even before accounting for fundraising. On average, Democratic incumbents garnered 82% of a district's total fundraising, while Republican incumbents hauled in
+84% of the total. These figures would suggest that the average incumbent actually
+outperformed partisan lean by 5-6 points, rather than the 2-3 points assuming neutral fundraising.
 
+Exit polls suggested weak Democratic turnout, but an unusually strong performance
+with independent voters in an in-party midterm. Per CNN's polling, registered Republicans
+had a 36% to 33% turnout advantage over registered Democrats, but independents actually
+broke *for Democrats* by a 2-point margin. The model's output confirms a collapse in Democratic base turnout in urban areas (especially in Florida and New York), but highlights their success in persuading rural, suburban, and college-educated voters.
 
+Election denialism has negative electoral consequences, with the model suggesting
+that Republicans who "fully denied" the results of the 2020 election lost about a point
+on net margin. This may seem insignificant, but consider that Democrats only needed to win 5 more seats to retain House control and lost 5 seats by less than 0.7 percentage points.
+In the closest race of the cycle, Democrat Adam Frisch came within 600 votes (0.16%) of flipping the 14-point Republican leaning CO-03 held by election-denying Lauren Boebert.
 
-Excluding uncontested seats, the average swing from the 2020 presidential election was 5.09 points towards Republicans, implying a national environment that leans Republican by 0.64 points. This figure is similar to the 1.21-point Republican environment implied model's intercept.
+Conversely, Republicans who rejected extremism found success on election day, outrunning
+their peers by 0.77 points. In the only two Republican victories in districts leaning at least 10 points towards Democrats, both Republican candidates were "fully accepting" of the 2020 election. In arguably Republicans' best performance of the cycle, Anthony D'Esposito won his first term in NY-04, which had backed Biden by almost 15 points. In CA-22, incumbent David Valadao won re-election in a seat that voted for Biden by over 13 points.
+In doing so, Valadao was one of only two Republican Trump-impeachers to secure another term (the other being Dan Newhouse in WA-04, who ran 12.5 points ahead of base partisanship).
+
+As a further point, the aforementioned model coefficients may understate the impact of extremism on the Republican Party as a whole. The historically weak performance by Republicans in an out-party midterm suggests that presence of extremist candidates thwarted even more moderate members of the party. It seems plausible to suggest that a non-election denying Republican Party may have yielded a more favorable national environment (which would only be reflected in the model's intercept).
+
 
 
 # Appendix
 
 ```{r}
+
 df %>%
   group_by(pvi_group) %>%
   summarise(districts = n(),
@@ -535,4 +555,10 @@ df %>%
             pvi = mean(pvi_22)) %>%
   arrange(desc(pvi)) %>%
   select(-pvi)
+
+df %>%
+  group_by(inc) %>%
+  summarise(dem_fundraising_pct = mean(dem_fundraising_pct))
+
+
 ```
