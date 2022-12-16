@@ -1,7 +1,7 @@
 ---
-title: "project"
+title: "Candidate Quality and Demographic Trends in the 2022 United States House of Representatives elections"
 author: "Kevin Ordet"
-date: "2022-12-14"
+date: "December 16, 2022"
 output:
   pdf_document: default
   html_document: default
@@ -16,7 +16,7 @@ library(knitr)
 library("ggrepel")  
 ```
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 results <- read.csv("data/cook_popular_vote_tracker.csv")
 deniers <- read.csv("data/fivethirtyeight_election_deniers.csv")
 districts <- read.csv("data/urbanization-index-2022.csv")
@@ -25,7 +25,7 @@ states <- read.csv("data/state_abbr.csv")
 education <- read.csv("data/educ_by_dist.csv")
 ```
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 house_deniers <- deniers%>%
   filter(Office == "Representative")
 
@@ -64,7 +64,7 @@ df <- merge(house_results, district_info) %>%
   mutate(state=substr(district, 1, 2))
 ```
 
-```{r message=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 house_fund <- fundraising %>%
   filter(Cand_Office == "H") %>%
   select("candidate" = Cand_Name, 
@@ -114,7 +114,7 @@ df <- merge(df, educ)
 
 
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 df <- df %>%
   mutate(dem_fundraising_pct = 100*(raised_dem / (raised_dem + raised_gop)),
          centered_urban_index = urbanindex - mean(urbanindex),
@@ -136,7 +136,7 @@ df <- df %>%
   group_by(inc) %>%
       mutate(dem_fundraising_pct_over_exp = dem_fundraising_pct - mean(dem_fundraising_pct)) %>% ungroup()
 
-df$resid <- df$margin - df$pvi_22
+df$poe <- df$margin - df$pvi_22
 
 df <- df %>%
   mutate(pvi_group = case_when(pvi_22 > 15 ~ "Safe D",
@@ -212,7 +212,8 @@ cat(variables)
 
 An detailed explanation of the above variables follows: 
 
-* FiveThirtyEight's partisan lean `pvi_22` is defined as "50 percent the state or district’s lean relative to the nation in the most recent presidential election, 25 percent its relative lean in the second-most-recent presidential election and 25 percent a custom state-legislative lean." By convention, positive values indicate Democratic-leaning seats and negative values indicate Republican-leaning seats. Seats that favor a party by 15 or more points are said to be "Safe Democratic/Republican," while seats that favor a party by 5 to 15 points are considered "Lean
+* FiveThirtyEight's partisan lean `pvi_22` is defined as "50 percent the state or district’s lean relative to the nation in the most recent presidential election, 25 percent its relative lean in the second-most-recent presidential election and 25 percent a custom state-legislative lean." By convention, positive values indicate Democratic-leaning seats and negative values indicate Republican-leaning seats. (It is also common to express partisan leans such as
+"D+3" to indicate a `pvi_22` of 3, or "R+5" to indicate a partisan lean `pvi_22` of -5.) Seats that favor a party by 15 or more points are said to be "Safe Democratic/Republican," while seats that favor a party by 5 to 15 points are considered "Lean
 Democratic/Republican." Districts with a `pvi_22` of no more than 5 points in either direction
 are categorized as "Toss-ups". By this metric, the most competitive seat in the country is TX-15 (`pvi_22` = -0.08), a right-trending district stretching from the Rio Grande Valley to the outskirts of San Antonio.
 
@@ -229,7 +230,8 @@ the 2020 election agreed that President Biden won and have not raised concerns a
 \$300,000 and the Republican raised \$100,000, the `dem_fundraising_pct` is 75. This method is
 used to evaluate fundraising since FiveThirtyEight's forecasting models implement this calculation (with some adjustments), rather than the raw fundraising totals.
 
-* The remaining variables are self-explanatory.
+* The remaining variables are self-explanatory. The reader should note that
+"DEM" and "GOP" are commonly used abbreviations for Democrats and Republicans, respectively.
 
 ## Research Aims
 
@@ -253,33 +255,39 @@ for the complexity of electoral politics. While broader trends often dictate out
 
 ## Exploratory Data Analysis
 
-```{r warning=FALSE, message=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width = 7.5, fig.height = 3}
 
 df$inc <- relevel(factor(df$inc), ref="open")
 df$inc <- relevel(factor(df$inc), ref="gop")
 
 df %>%
   ggplot(mapping=aes(x=pvi_22, y=margin, fill=inc, color=inc)) +
-    geom_hline(yintercept=0) +
+    geom_hline(yintercept=0, lty="dashed") +
            geom_point(pch=21, size=2, color="black") +
-  theme_bw()
+  theme_bw() +
+  labs(title = "House margin vs. Partisan lean",
+       x = "Partisan lean",
+       y = "House margin",
+       fill = "Incumbent")
 ```
 
 The plot above shows the relationship between FiveThirtyEight's partisan lean `pvi_22` and the actual House vote `margin`. The points are colored by the 
 incumbent party `inc`: blue for Democratic incumbents, red for Republican incumbents,
-and green for open seats. 
+and green for open seats. Points above the dashed line represent districts won
+by Democrats, while points below it indicate districts won by Republicans.
 
-Glaringly, the variation in `pvi_22` lean predicts 96% of the variation in `margin`. Although partisanship dominates, there are several examples of candidates defying expectations across the map.
+Glaringly, the variation in partisan lean `pvi_22` predicts 96% of the variation in `margin`. Although partisanship dominates, there are several examples of candidates defying expectations across the map.
 
-From here on, `resid` is defined as the difference between `margin` and `pvi_22`.
-Positive values of `resid` indicate Democratic outperformances, while negative values represent Republican ones. By comparing the actual margin to the partisanship of each district, we can evaluate how each party performed relative to expectations. 
+From here on, Democratic performance over expectation `poe` is defined as the difference between `margin` and `pvi_22`. Positive values of `poe` indicate Democratic outperformances, while negative values represent Republican ones. By comparing the actual margin to the partisanship of each district, we can evaluate how each party performed relative to expectations. 
 
-```{r}
-head(df %>% arrange(desc(resid)), 5) %>%
-  select(district, pvi_22, margin, resid)
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+head(df %>% arrange(desc(poe)), 5) %>%
+  select(district, pvi_22, margin, poe) %>%
+  kable(digits=1, caption="Democratic outperformances")
 
-head(df %>% arrange(desc(-resid)), 5) %>%
-  select(district, pvi_22, margin, resid)
+head(df %>% arrange(desc(-poe)), 5) %>%
+  select(district, pvi_22, margin, poe) %>%
+  kable(digits=1, caption="Democratic outperformances")
 ```
 
 The tables above show the five largest outperformances on each side of the aisle.
@@ -297,68 +305,79 @@ The major theme, to be explored further, is that although partisanship reigns su
 factors to be analyzed is incumbency.
 
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width = 7.5, fig.height = 3}
 df %>%
-  ggplot(mapping=aes(x=pvi_22, y=resid, fill=inc, color=inc)) +
-    geom_hline(yintercept=0) +
+  ggplot(mapping=aes(x=pvi_22, y=poe, fill=inc, color=inc)) +
+    geom_hline(yintercept=0, lty="dashed") +
            geom_point(pch=21, size=2, color="black") +
             geom_smooth(alpha=0.2)+
-  theme_bw()
+  theme_bw() +
+  labs(y= "Dem performance over expectation (POE)", x="Partisan lean",
+       fill="Incumbent", color="Incumbent",title="Dem performance over expectation (POE) vs. Partisan lean")
 ```
 
-The plot above shows the `resid` of each district plotted against the partisan lean, with the points again colored by incumbent party `inc`. The trendlines highlight the
-importance of incumbency in swing districts. In "crossover districts" that leaned towards the one party but were held by the other, incumbents tended to defy expectations by 5 to 10 points or more. This trend can be partially attributed to self-selection; only the largest outperformers are going to hold crossover districts
+The plot above shows the Democratic performance over expectation`poe` of each district plotted against the partisan lean, with the points again colored by incumbent party `inc`.
+Democrats overperformed in districts plotted above the dashed line and underperformed in
+districts plotted below the dashed line. 
+
+The trendlines highlight the importance of incumbency in swing districts. In "crossover districts" that leaned towards the one party but were held by the other, incumbents tended to defy expectations by 5 to 10 points or more. This trend can be partially attributed to self-selection; only the largest outperformers are going to hold crossover districts
 in the first place.
 
 Another interesting point is the relative success of Democrats in Republican-tilting
 open seats. In winning the national popular vote, Republicans overperformed partisanship in the majority of open seats. However, Democrats actually tended
-to beat partisan lean in open seats with a lean between R+5 and R+15. 
-Further analysis of the qualities of these districts and candidates will help explain this phenomenon.
+to beat partisan lean in open seats with a lean between R+5 and R+15 (i.e. "Lean R" seats). Further analysis of the qualities of these districts and candidates will help explain this phenomenon.
 
 
 
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 df %>%
   filter(pvi_group == "Lean R", inc=="open") %>%
-  select(district, gop_stance, pvi_22, margin, resid) %>%
-  arrange(desc(resid))
+  select(district, gop_stance, pvi_22, margin, poe) %>%
+  arrange(desc(poe)) %>%
+  kable(digits=1, caption="Performance over Expectation (POE) in open Lean R seats (PVI: R+15 to R+5)")
   
 ```
-The table above shows the Republican-leaning (`pvi_22` between -15 and -5) open seats sorted by Democratic outperformance `resid`. Of note, Democrat Marie Gluesenkamp Perez defeated election-denying Republican Joe Kent in WA-03, which leans 9 points Republican, in what has been dubbed "the upset of the cycle." In total, Democrats
+The table above shows the Republican-leaning (`pvi_22` between -15 and -5) open seats sorted by Democratic outperformance `poe`. Of note, Democrat Marie Gluesenkamp Perez defeated election-denying Republican Joe Kent in WA-03, which leans 9 points Republican, in what has been dubbed "the upset of the cycle." In total, Democrats
 outran expectations in 9 of the 12 districts and by an average of 2.1 points. It should
 be noted that all six Republican election deniers contesting these seats ran behind partisan lean; the only full acceptor ran almost 10 points ahead of partisanship.
 
 
-```{r message=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width = 7.5, fig.height = 3}
 
 df %>%
-  ggplot(mapping=aes(x=dem_fundraising_pct, y=resid, fill=inc, color=inc)) +
+  ggplot(mapping=aes(x=dem_fundraising_pct, y=poe, fill=inc, color=inc)) +
   facet_wrap(~ inc) +
     geom_hline(yintercept=0) +
            geom_point(pch=21, size=2, color="black") +
   geom_smooth(alpha=0.1, method="lm") +
-  theme_bw()
+  theme_bw()  +
+  labs(y= "Dem performance over expectation (POE)", x="Dem fundraising share (%)",
+       fill="Incumbent", color="Incumbent",title="Dem performance over expectation (POE) vs. Dem fundraising share (%), by Incumbent party")
 
 
 df %>%
-  ggplot(mapping=aes(x=pct_college, y=resid, fill=inc, color=inc))+  facet_wrap(~ inc) +
+  ggplot(mapping=aes(x=pct_college, y=poe, fill=inc, color=inc))+  facet_wrap(~ inc) +
     geom_hline(yintercept=0) +
            geom_point(pch=21, size=2, color="black") +
   geom_smooth(alpha=0.1, method="lm") +
-  theme_bw()
+  theme_bw()  +
+  labs(y= "Dem performance over expectation (POE)", x="College educated population (%)",
+       fill="Incumbent", color="Incumbent",title="Dem performance over expectation (POE) vs. College educated population (%), by Incumbent party")
 
 
 df %>%
-  ggplot(mapping=aes(x=urbanindex, y=resid, fill=inc, color=inc))+  facet_wrap(~ inc) +
+  ggplot(mapping=aes(x=urbanindex, y=poe, fill=inc, color=inc))+  facet_wrap(~ inc) +
     geom_hline(yintercept=0) +
            geom_point(pch=21, size=2, color="black") +
   geom_smooth(alpha=0.1, method="lm") +
-  theme_bw()
+  theme_bw()  +
+  labs(y= "Dem performance over expectation (POE)", x="Urbanization index",
+       fill="Incumbent", color="Incumbent",title="Dem performance over expectation (POE) vs. Urbanization index, by Incumbent party")
 ```
 
 
-The plots above show the Democratic outperformance `resid` plotted against
+The plots above show the Democratic outperformance `poe` plotted against
 Democratic fundrasing share `dem_fundriasing_pct`, percent of population with a
 college degree `pct_college`, and FiveThirtyEight's urban index. The plots are
 also grouped by incumbent type `inc`. The first major observation is that Democrats
@@ -367,7 +386,7 @@ while Republicans did so in urban and low college-educated seats. Second, increa
 
 
 
-```{r warning=FALSE, message=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width = 7.5, fig.height = 3}
 df$gop_stance <- relevel(factor(df$gop_stance), ref="unclear")
 df$gop_stance <- relevel(factor(df$gop_stance), ref="denied")
 
@@ -378,16 +397,16 @@ df <- df %>%
 df$pvi_group2 <- relevel(factor(df$pvi_group2), ref="Safe R")
 
 df %>%
-  ggplot(mapping=aes(x=gop_stance, y=resid, fill=gop_stance))+ facet_wrap(~ pvi_group2) +    geom_hline(yintercept=0) +
+  ggplot(mapping=aes(x=gop_stance, y=poe, fill=gop_stance))+ facet_wrap(~ pvi_group2) +    geom_hline(yintercept=0) +
     geom_boxplot()+
-  theme_bw()
+  theme_bw() +
+  labs(y= "Dem performance over expectation (POE)", x="Republican stance on 2020",
+       fill="Republican stance on 2020", color="Republican stance on 2020",title="Dem performance over expectation (POE) vs. Republican stance on 2020, by PVI group")
+  
 
 ```
 
-The boxplot above shows the Democratic outperformance `resid` by the `gop_stance` on the 2020 election, grouped by the partisan lean of the district. "Competitive" districts include all districts with a partisan lean `pvi_22` less than 15 points in either direction (that is, "Lean R", "Lean D", and "Tossup" seats). While election denying Republicans
-actually ran ahead of expectation in Safe Democratic seats, they underperformed acceptors
-in both Safe Republican an Competitive districts, and they underperformed candidates
-with an unclear position in Safe Republican races. There are several possible explanations
+The boxplot above shows the Democratic outperformance `poe` by the `gop_stance` on the 2020 election, grouped by the partisan lean of the district. "Competitive" districts include all districts with a partisan lean `pvi_22` less than 15 points in either direction (that is, "Lean R", "Lean D", and "Tossup" seats). Note that the bars are colored by `gop_stance` rather than `inc`. While election denying Republicans actually ran ahead of expectation in Safe Democratic seats, they underperformed acceptors in both Safe Republican an Competitive districts, and they underperformed candidates with an unclear position in Safe Republican races. There are several possible explanations
 for this occurrence; strong Republican voters may have been more likely to turn out
 for election deniers in uncompetitive races they otherwise would not have. Regardless,
 the critical takeaway is the relative success of election-accepting Republicans in
@@ -395,37 +414,42 @@ competitive districts, which ultimately decide the outcome of the election.
 
 
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width = 7.5, fig.height = 3}
 
 df %>%
   group_by(state) %>%
-  mutate(d_over = ifelse(resid>0, 1, 0)) %>%
-  summarise(pvi_22 = mean(pvi_22), resid = mean(resid), d_over = sum(d_over), n = n()) %>%
-  arrange(desc(resid)) %>%
-  ggplot(mapping=aes(x=pvi_22, y=resid)) +
+  mutate(d_over = ifelse(poe>0, 1, 0)) %>%
+  summarise(pvi_22 = mean(pvi_22), poe = mean(poe), d_over = sum(d_over), n = n()) %>%
+  arrange(desc(poe)) %>%
+  ggplot(mapping=aes(x=pvi_22, y=poe)) +
   geom_point() +
   geom_label_repel(aes(size=n, label=state)) +
   geom_hline(yintercept=0, alpha = 0.2, lty="dashed") +
   geom_vline(xintercept=0, alpha = 0.2, lty="dashed") +
-  theme_bw()
+  theme_bw() +
+  theme(legend.position="hide") +
+  labs(y= "Average Dem performance over expectation (POE)", x="Average partisan lean",
+       title="State-by-state average performance over expectation (POE) vs. average partisan lean")
 ```
-The plot above shows the average Democratic overperformance `resid` by state plotted
+The plot above shows the average Democratic overperformance `poe` by state plotted
 againt the state's average partisan lean `pvi_22`. The labels are sized by the number of
 districts in the state. 
 
-There is little correlation between partisan lean of the state and average Democratic outperformance ($r^2 = 0.04$). However, there are some extreme cases of defying expectations within states.
+There is little correlation between partisan lean of the state and average Democratic outperformance ($r^2 = 0.04$). However, there were some extreme cases of defying expectations throughout a state:
 
 * In Florida, Republicans outran partisan lean in 23 of 25 analyzed districts by an average of 7.9 points.
 
-* In New York, Republicans outran partisan lean in 23 of 24 analyzed districts by an average of 6.5 points.
-
 * In Colorado, Democrats outran partisan lean in all 8 districts by an average of 6.6 points.
+
+* In New York, Republicans outran partisan lean in 23 of 24 analyzed districts by an average of 6.5 points.
 
 * In Michigan, Democrats outran partisan lean in 12 of 13 districts by an average of 4.5 points.
 
 With the exception of New York, these strong localized environments have largely been attributed to popular governors running for re-election (Ron DeSantis in FL, Jared Polis in CO, and Gretchen Whitmer in MI). In Michigan, an abortion rights referendum also has been
 credited with boosting Democratic enthusiasm. On the other hand, Democratic turnout was
 depressed in New York, where Democratic voters were lukewarm about scandal-ridden Governor Andrew Cuomo's appointed replacement, Kathy Hochul.
+
+
 
 # Methodology
 
@@ -440,8 +464,7 @@ variable is also taken, which uses a `1` for Democratic incumbents, `-1` for Rep
 * The FiveThirtyEight partisan lean `pvi_22` and urbanization index `urbanindex`
 were taken `urbanization-index-2022.csv`.
 
-* The Republican candidate's stance on the 2022 election was taken from `fivethirtyeight_election_deniers.csv`. The `denier` variable was encoded
-as `1` for "fully denying" candidates and `0` otherwise.
+* The Republican candidate's stance on the 2022 election was taken from `fivethirtyeight_election_deniers.csv`. The `gop_stance` variable was encoded as `denied` for "full deniers", `accepted` for "full acceptors", and `unclear` for all other stances.
 
 * The percent college educated population `pct_college` was taken from `educ.by.district.csv`.
 
@@ -470,28 +493,21 @@ the `margin`, a linear model was fit using the predictors `pvi_22`, `inc`, `cent
 and `denier`. To account for dependence within states, a random intercept was
 included for `state`. The full equation for the model is as follows:
 
-\begin{align*}
-\text{Margin}_{ij} = {} & (\gamma_{00} + u_{0j})+\gamma_{1}\text{pvi_22}+ \gamma_{2}\text{inc_dem}  + \gamma_{3}\text{inc_gop} + \gamma_{4}\text{centered_dem_fundraising_pct} \, + \\ &
-\gamma_{5}\text{centered_urban_index} + \gamma_{6}\text{centered_college_pct} + \gamma_{7}\text{denier} + \epsilon_{ij}
-\end{align*}
-\begin{align*}
-\epsilon_{ij} &\sim \mathcal{N}(0, \sigma^2_\epsilon) \\
-u_{0j} &\sim \mathcal{N}(0, \sigma^2_u)
-\end{align*}
 
 
 
 # Results
 
-```{r}
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 df$inc <- relevel(factor(df$inc), ref="dem")
 df$inc <- relevel(factor(df$inc), ref="open")
-df
+df$gop_stance <- relevel(factor(df$gop_stance), ref="denied")
+df$gop_stance <- relevel(factor(df$gop_stance), ref="unclear")
 
 m <- lmer(margin ~ pvi_22 + inc +
           centered_dem_fundraising_pct +
           centered_urban_index +
-          centered_college_pct + denier + acceptor + (1 | state), data=df)
+          centered_college_pct + gop_stance + (1 | state), data=df)
 
 coefs <- data.frame(coef(summary(m)))
 
@@ -501,14 +517,13 @@ rownames(coefs) = c("Intercept", "FiveThirtyEight Partisan Lean (PVI)",
                     "Democratic percentage of fundraising (centered)",
                     "FiveThirtyEight Urbanization Index (centered)",
                     "College graduate percentage (centered)",
-                    "Republican \"fully denies\" legitamcy of 2020 election",
-                    "Republican \"fully accepts\" legitamcy of 2020 election")
+                    "Republican \"fully denies\" legitimacy of 2020 election",
+                    "Republican \"fully accepts\" legitimacy of 2020 election")
+colnames(coefs) = c("Estimate", "Standard error", "t-value")
 
 coefs %>%
-  kable(digits=3)
+  kable(digits=3, caption="Model fixed effects")
 ```
-
-
 
 For an open seat with even partisanship, equal fundraising, the national average
 for population density and educational attainment, and
@@ -560,12 +575,9 @@ broke *for Democrats* by a 2-point margin. The model's output confirms a collaps
 
 Election denialism has negative electoral consequences, with the model suggesting
 that Republicans who "fully denied" the results of the 2020 election lost about a point
-on net margin. This may seem insignificant, but consider that Democrats only needed to win 5 more seats to retain House control and lost 5 seats by less than 0.7 percentage points.
-In the closest race of the cycle, Democrat Adam Frisch came within 600 votes (0.16%) of flipping the 14-point Republican leaning CO-03 held by election-denying Lauren Boebert.
+on net margin. This may seem insignificant, but consider that Democrats only needed to win five more seats to retain House control and lost five seats by fewer than 0.7 percentage points. In the closest race of the cycle, Democrat Adam Frisch came within 600 votes (0.16%) of flipping the 14-point Republican leaning CO-03 held by election-denying Lauren Boebert.
 
-Conversely, Republicans who rejected extremism found success on election day, outrunning
-their peers by 0.77 points. In the only two Republican victories in districts leaning at least 10 points towards Democrats, both Republican candidates were "fully accepting" of the 2020 election. In arguably Republicans' best performance of the cycle, Anthony D'Esposito won his first term in NY-04, which had backed Biden by almost 15 points. In CA-22, incumbent David Valadao won re-election in a seat that voted for Biden by over 13 points.
-In doing so, Valadao was one of only two Republican Trump-impeachers to secure another term (the other being Dan Newhouse in WA-04, who ran 12.5 points ahead of base partisanship).
+Conversely, Republicans who rejected extremism found success on election day. In the only two Republican victories in districts leaning at least 10 points towards Democrats, both Republican candidates were "fully accepting" of the 2020 election. In arguably Republicans' best performance of the cycle, Anthony D'Esposito won his first term in NY-04, which had backed Biden by almost 15 points. In CA-22, incumbent David Valadao won re-election in a seat that voted for Biden by over 13 points. In doing so, Valadao was one of only two Republican Trump-impeachers to secure another term (the other being Dan Newhouse in WA-04, who ran 12.5 points ahead of base partisanship).
 
 As a further point, the aforementioned model coefficients may understate the impact of extremism on the Republican Party as a whole. The historically weak performance by Republicans in an out-party midterm suggests that presence of extremist candidates thwarted even more moderate members of the party. It seems plausible to suggest that a non-election denying Republican Party may have yielded a more favorable national environment (which would only be reflected in the model's intercept).
 
@@ -573,21 +585,16 @@ As a further point, the aforementioned model coefficients may understate the imp
 
 # Appendix
 
-```{r}
-
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 df %>%
   group_by(pvi_group) %>%
   summarise(districts = n(),
             pct_college = mean(pct_college),
-            dem_fundraising_pct = mean(dem_fundraising_pct),
             urban_index = mean(urbanindex),
+            dem_fundraising_pct = mean(dem_fundraising_pct),
             pvi = mean(pvi_22)) %>%
   arrange(desc(pvi)) %>%
-  select(-pvi)
-
-df %>%
-  group_by(inc) %>%
-  summarise(dem_fundraising_pct = mean(dem_fundraising_pct))
-
-
+  select(-pvi) %>%
+  kable(digits=1, caption="Demographic and fundraising summary of PVI groups")
 ```
+# References
