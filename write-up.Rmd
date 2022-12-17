@@ -471,9 +471,14 @@ one Democrat and one Republican, having complete fundraising data). To predict
 the `margin`, a linear model was fit using the predictors `pvi_22`, `inc`, `centered_dem_fundraising_pct`, `centered_urban_index`, `centered_college_pct`,
 and `gop_stance`. To account for dependence within states, a random intercept was
 included for `state`. The full equation for the model is as follows:
+$$
+y_{ij} =(\gamma_{00} + u_{0j}) +\gamma_{1} x_{1ij} +\gamma_{2} x_{2ij} +\gamma_{3} x_{3ij} +\gamma_{4} x_{4ij} +
+\gamma_{5} x_{5ij} +\gamma_{6} x_{6ij} +\gamma_{7} x_{7ij} +\gamma_{8} x_{8ij} \epsilon_{ij}
+$$
 
-
-(insert here)
+$$
+\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2_\epsilon) \quad \quad \quad u_{0j} \sim \mathcal{N}(0, \sigma^2_u)
+$$
 
 # Results
 
