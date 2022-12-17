@@ -473,7 +473,7 @@ and `gop_stance`. To account for dependence within states, a random intercept wa
 included for `state`. The full equation for the model is as follows:
 $$
 y_{ij} =(\gamma_{00} + u_{0j}) +\gamma_{1} x_{1ij} +\gamma_{2} x_{2ij} +\gamma_{3} x_{3ij} +\gamma_{4} x_{4ij} +
-\gamma_{5} x_{5ij} +\gamma_{6} x_{6ij} +\gamma_{7} x_{7ij} +\gamma_{8} x_{8ij} \epsilon_{ij}
+\gamma_{5} x_{5ij} +\gamma_{6} x_{6ij} +\gamma_{7} x_{7ij} +\gamma_{8} x_{8ij} +\epsilon_{ij}
 $$
 
 $$
